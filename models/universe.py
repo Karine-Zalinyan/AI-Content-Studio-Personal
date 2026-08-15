@@ -232,6 +232,8 @@ class UniverseReference(AppBaseModel):
     # Resolved snapshot – populated by UniverseContextAgent at planning time
     resolved_characters: list[Character] = Field(default_factory=list)
     resolved_locations: list[Location] = Field(default_factory=list)
+    # Relationships filtered to those involving the resolved characters/locations
+    resolved_relationships: list[Relationship] = Field(default_factory=list)
     resolved_events: list[UniverseEvent] = Field(default_factory=list)
     resolved_rules: list[WorldRule] = Field(default_factory=list)
     metadata: dict = Field(default_factory=dict)

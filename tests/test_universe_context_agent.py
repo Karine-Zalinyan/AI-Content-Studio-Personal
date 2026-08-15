@@ -15,7 +15,7 @@ import pytest
 
 from agents.universe_context_agent import UniverseContextAgent
 from models.project import Project
-from models.universe import Character, Location, Universe, UniverseEvent, WorldRule
+from models.universe import Character, Location, Relationship, Universe, UniverseEvent, WorldRule
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
@@ -96,7 +96,7 @@ def test_max_events_zero_returns_no_events():
     )
     p = _project()
 
-    ref = _agent().run(p, u, max_events=0).universe_ref
+    ref = _agent().run(p, u, character_ids=[hero.id], max_events=0).universe_ref
     assert ref is not None
     assert ref.resolved_events == []
 
@@ -108,7 +108,7 @@ def test_max_events_one_returns_single_event():
     u = Universe(name="World", characters=[hero], events=[e1, e2])
     p = _project()
 
-    ref = _agent().run(p, u, max_events=1).universe_ref
+    ref = _agent().run(p, u, character_ids=[hero.id], max_events=1).universe_ref
     assert ref is not None
     assert len(ref.resolved_events) == 1
 
@@ -119,7 +119,7 @@ def test_max_events_larger_than_available_returns_all():
     u = Universe(name="World", characters=[hero], events=events)
     p = _project()
 
-    ref = _agent().run(p, u, max_events=100).universe_ref
+    ref = _agent().run(p, u, character_ids=[hero.id], max_events=100).universe_ref
     assert ref is not None
     assert len(ref.resolved_events) == 3
 
@@ -138,7 +138,7 @@ def test_events_ordered_newest_first():
     u = Universe(name="World", characters=[hero], events=[e_mid, e_old, e_new])
     p = _project()
 
-    ref = _agent().run(p, u).universe_ref
+    ref = _agent().run(p, u, character_ids=[hero.id]).universe_ref
     assert ref is not None
     titles = [e.title for e in ref.resolved_events]
     assert titles == ["New War", "Mid Treaty", "Old Battle"]
@@ -153,7 +153,7 @@ def test_events_with_max_events_takes_newest():
     u = Universe(name="World", characters=[hero], events=[e_old, e_new])
     p = _project()
 
-    ref = _agent().run(p, u, max_events=1).universe_ref
+    ref = _agent().run(p, u, character_ids=[hero.id], max_events=1).universe_ref
     assert ref is not None
     assert len(ref.resolved_events) == 1
     assert ref.resolved_events[0].title == "Recent"
@@ -264,3 +264,113 @@ def test_continuity_summary_no_hard_rules_not_mentioned():
     assert ref is not None
     # Soft rules do not appear in the "Hard world rules:" line
     assert "Hard world rules" not in ref.continuity_summary
+
+
+# ── Test: negative max_events is clamped to 0 ─────────────────────────────────
+
+
+def test_negative_max_events_clamped_to_zero():
+    hero = _char("Hero")
+    events = [UniverseEvent(title=f"Ev{i}", involved_entity_ids=[hero.id]) for i in range(3)]
+    u = Universe(name="World", characters=[hero], events=events)
+    p = _project()
+
+    ref = _agent().run(p, u, character_ids=[hero.id], max_events=-5).universe_ref
+    assert ref is not None
+    assert ref.resolved_events == []
+
+
+# ── Test: omitting IDs resolves no entities (explicit IDs required) ───────────
+
+
+def test_omitting_ids_resolves_no_characters_or_locations():
+    hero = _char("Hero")
+    city = _loc("Metropolis")
+    u = Universe(name="World", characters=[hero], locations=[city])
+    p = _project()
+
+    ref = _agent().run(p, u).universe_ref
+    assert ref is not None
+    assert ref.resolved_characters == []
+    assert ref.resolved_locations == []
+
+
+# ── Test: relationships filtered to resolved entities only ────────────────────
+
+
+def test_relationships_filtered_to_selected_entities():
+    hero = _char("Hero")
+    sidekick = _char("Sidekick")
+    villain = _char("Villain")
+
+    hero_sidekick_rel = Relationship(
+        from_entity_id=hero.id, to_entity_id=sidekick.id, relationship_type="ally"
+    )
+    hero_villain_rel = Relationship(
+        from_entity_id=hero.id, to_entity_id=villain.id, relationship_type="enemy"
+    )
+    sidekick_villain_rel = Relationship(
+        from_entity_id=sidekick.id, to_entity_id=villain.id, relationship_type="rival"
+    )
+
+    u = Universe(
+        name="World",
+        characters=[hero, sidekick, villain],
+        relationships=[hero_sidekick_rel, hero_villain_rel, sidekick_villain_rel],
+    )
+    p = _project()
+
+    # Select only hero and sidekick — villain is not directly selected, but
+    # relationships where sidekick (a selected entity) is an endpoint are still included.
+    ref = _agent().run(p, u, character_ids=[hero.id, sidekick.id]).universe_ref
+    assert ref is not None
+    resolved_rel_ids = {r.id for r in ref.resolved_relationships}
+    # Relationships where hero or sidekick is an endpoint must appear
+    assert hero_sidekick_rel.id in resolved_rel_ids
+    assert hero_villain_rel.id in resolved_rel_ids
+    # sidekick_villain_rel appears because sidekick is a selected entity
+    assert sidekick_villain_rel.id in resolved_rel_ids
+    # Relationship strictly between two unselected entities must NOT appear
+    pure_unrelated = Relationship(
+        from_entity_id=villain.id, to_entity_id="some-other-entity", relationship_type="minion"
+    )
+    # Verify a fully out-of-scope relationship is absent
+    assert pure_unrelated.id not in resolved_rel_ids
+
+
+def test_unrelated_universe_entities_do_not_leak_into_context():
+    """Architectural boundary test: entities not selected must not appear in resolved context."""
+    hero = _char("Hero")
+    bystander = _char("Bystander")
+    hero_event = UniverseEvent(title="Hero Saves the Day", involved_entity_ids=[hero.id])
+    bystander_event = UniverseEvent(
+        title="Bystander's Unrelated Story", involved_entity_ids=[bystander.id]
+    )
+    unrelated_rel = Relationship(
+        from_entity_id=bystander.id, to_entity_id="another-id", relationship_type="associate"
+    )
+
+    u = Universe(
+        name="World",
+        characters=[hero, bystander],
+        events=[hero_event, bystander_event],
+        relationships=[unrelated_rel],
+    )
+    p = _project()
+
+    ref = _agent().run(p, u, character_ids=[hero.id]).universe_ref
+    assert ref is not None
+
+    # Only hero should appear in resolved characters
+    resolved_char_ids = {c.id for c in ref.resolved_characters}
+    assert hero.id in resolved_char_ids
+    assert bystander.id not in resolved_char_ids
+
+    # Only hero's event should appear
+    resolved_event_titles = {e.title for e in ref.resolved_events}
+    assert "Hero Saves the Day" in resolved_event_titles
+    assert "Bystander's Unrelated Story" not in resolved_event_titles
+
+    # The bystander's unrelated relationship must not appear
+    resolved_rel_ids = {r.id for r in ref.resolved_relationships}
+    assert unrelated_rel.id not in resolved_rel_ids

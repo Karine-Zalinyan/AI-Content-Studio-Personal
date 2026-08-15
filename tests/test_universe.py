@@ -221,7 +221,9 @@ def test_project_with_universe_ref_round_trip():
     u = make_universe()
     p = Project(topic="Episode 3")
     agent = UniverseContextAgent()
-    p2 = agent.run(p, u)
+    char_ids = [c.id for c in u.characters]
+    loc_ids = [loc.id for loc in u.locations]
+    p2 = agent.run(p, u, character_ids=char_ids, location_ids=loc_ids)
 
     data = p2.model_dump()
     p3 = Project.model_validate(data)
