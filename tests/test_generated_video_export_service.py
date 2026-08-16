@@ -206,8 +206,8 @@ def test_default_ffmpeg_concat_reencodes_to_real_output_resolution(tmp_path, mon
         ],
     )
     assets = [
-        _asset(tmp_path, name="scene-1.mp4", scene_number=1, job_id="gen-1", sequence=1, resolution="720x1280"),
-        _asset(tmp_path, name="scene-2.mp4", scene_number=2, job_id="gen-2", sequence=2, resolution="1080x1920"),
+        _asset(tmp_path, name="scene-1.mp4", scene_number=1, job_id="gen-1", sequence=1, resolution="1080x1920"),
+        _asset(tmp_path, name="scene-2.mp4", scene_number=2, job_id="gen-2", sequence=2, resolution="720x1280"),
     ]
     commands: list[list[str]] = []
 

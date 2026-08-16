@@ -180,11 +180,14 @@ class GeneratedVideoExportService:
         return f"{width}x{height}"
 
     def _output_dimensions(self, assets: Sequence[GeneratedAsset]) -> tuple[int, int]:
-        width, height = self._resolution_dimensions(assets[0])
-        if width == 0 or height == 0:
-            source = Path(assets[0].file_path).name
-            raise RuntimeError(f"Generated asset '{source}' is missing an exportable resolution.")
-        return width, height
+        dimensions: list[tuple[int, int]] = []
+        for asset in assets:
+            width, height = self._resolution_dimensions(asset)
+            if width == 0 or height == 0:
+                source = Path(asset.file_path).name
+                raise RuntimeError(f"Generated asset '{source}' is missing an exportable resolution.")
+            dimensions.append((width, height))
+        return min(dimensions, key=lambda pair: (pair[0] * pair[1], pair[0], pair[1]))
 
     @staticmethod
     def _aspect_ratio(asset: GeneratedAsset) -> str:
