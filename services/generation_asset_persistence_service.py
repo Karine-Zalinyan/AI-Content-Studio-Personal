@@ -54,6 +54,7 @@ class GenerationAssetPersistenceService:
                         "request_id": result.provider_response.get("request_id", ""),
                         "asset_url": asset_url,
                         "content_type": result.provider_response.get("content_type", "video/mp4"),
+                        "aspect_ratio": result.provider_response.get("aspect_ratio", ""),
                     },
                 )
             )

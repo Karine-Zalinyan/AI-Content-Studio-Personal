@@ -36,6 +36,7 @@ def _result(
             "request_id": "req-1",
             "duration": 5,
             "resolution": "720p",
+            "aspect_ratio": "9:16",
         },
     )
 
@@ -54,6 +55,7 @@ def test_successful_result_is_downloaded_and_normalized(tmp_path) -> None:
     assert assets[0].duration == 5
     assert assets[0].resolution == "720p"
     assert assets[0].metadata["request_id"] == "req-1"
+    assert assets[0].metadata["aspect_ratio"] == "9:16"
     assert (tmp_path / "scene_0001_gen-1.mp4").read_bytes() == b"fake-mp4"
 
 
