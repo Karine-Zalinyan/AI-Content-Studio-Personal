@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Sequence
 
 from models.generation_plan import GenerationPlan
 from models.project import GeneratedAsset, VideoOutput
