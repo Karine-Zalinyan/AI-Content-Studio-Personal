@@ -190,6 +190,7 @@ class GeneratedVideoExportService:
                 source = Path(asset.file_path).name
                 raise RuntimeError(f"Generated asset '{source}' is missing an exportable resolution.")
             dimensions.append((width, height))
+        # Normalize to the smallest persisted 9:16 source to avoid upscaling smaller clips during concat.
         return min(dimensions, key=lambda pair: (pair[0] * pair[1], pair[0], pair[1]))
 
     @staticmethod
