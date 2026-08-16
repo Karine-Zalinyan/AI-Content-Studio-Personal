@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import httpx
 import pytest
 
 from models.generation_plan import GenerationJob, GenerationPlan
 from models.project import GeneratedAsset, VideoOutput
+from services.generation_asset_persistence_service import GenerationAssetPersistenceService
 from services.generation_executor_service import ExecutionReport, ExecutionResult, ExecutionStatus, GenerationExecutor
 from services.generation_pipeline_service import GenerationPipelineService
+from services.providers.fal_seedance import FalSeedanceAdapter
 
 
 def _plan(*jobs: GenerationJob) -> GenerationPlan:
@@ -128,6 +131,13 @@ def test_empty_plan_stops_before_export() -> None:
     assert exporter.calls == []
 
 
+def test_pipeline_rejects_ambiguous_executor_and_adapter_configuration() -> None:
+    executor = GenerationExecutor(adapter=lambda job: {"asset_url": "https://example.com/video.mp4"})
+
+    with pytest.raises(ValueError, match="either adapter or executor"):
+        GenerationPipelineService(adapter=lambda job: {}, executor=executor)
+
+
 def test_pipeline_preserves_executor_report_contract() -> None:
     executor = GenerationExecutor(adapter=lambda job: {"asset_url": "https://example.com/video.mp4"})
     persistence = FakePersistence([])
@@ -161,3 +171,58 @@ def test_pipeline_preserves_executor_report_contract() -> None:
 
     assert persistence.reports[0].universe_id == "universe-42"
     assert persistence.reports[0].results[0].job_id == "gen-1"
+
+
+def test_fal_seedance_to_real_persistence_then_export_contract(tmp_path: Path) -> None:
+    asset_url = "https://cdn.example.test/generated.mp4"
+
+    def provider_handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/seedance":
+            return httpx.Response(
+                200,
+                json={
+                    "request_id": "req-e2e-1",
+                    "video": {
+                        "url": asset_url,
+                        "content_type": "video/mp4",
+                        "file_name": "generated.mp4",
+                    },
+                },
+            )
+        if request.method == "GET" and str(request.url) == asset_url:
+            return httpx.Response(200, content=b"realistic-mock-mp4")
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(provider_handler)
+    provider_client = httpx.Client(transport=transport)
+    persistence_client = httpx.Client(transport=transport)
+    persistence = GenerationAssetPersistenceService(
+        tmp_path / "generated",
+        http_client=persistence_client,
+    )
+    exporter = FakeExporter()
+    adapter = FalSeedanceAdapter(
+        api_key="test-key",
+        http_client=provider_client,
+        endpoint="https://fal.run/seedance",
+    )
+
+    try:
+        result = GenerationPipelineService(
+            adapter=adapter,
+            persistence=persistence,
+            exporter=exporter,
+        ).run(_plan(_job(1, 1)))
+    finally:
+        provider_client.close()
+        persistence_client.close()
+
+    assert result.report.results[0].provider_response["request_id"] == "req-e2e-1"
+    assert result.report.results[0].provider_response["resolution"] == "720x1280"
+    assert len(result.assets) == 1
+    persisted = Path(result.assets[0].file_path)
+    assert persisted.read_bytes() == b"realistic-mock-mp4"
+    assert result.assets[0].metadata["asset_url"] == asset_url
+    assert result.assets[0].metadata["aspect_ratio"] == "9:16"
+    assert len(exporter.calls) == 1
+    assert exporter.calls[0][1][0].file_path == str(persisted)
