@@ -40,8 +40,10 @@ class GenerationPipelineService:
         exporter: GeneratedVideoExportService | None = None,
         output_dir: str | Path = "output",
     ) -> None:
-        self._adapter = adapter or FalSeedanceAdapter()
-        self._executor = executor or GenerationExecutor(adapter=self._adapter)
+        if adapter is not None and executor is not None:
+            raise ValueError("Provide either adapter or executor, not both.")
+
+        self._executor = executor or GenerationExecutor(adapter=adapter or FalSeedanceAdapter())
         self._persistence = persistence or GenerationAssetPersistenceService()
         self._exporter = exporter or GeneratedVideoExportService(output_dir)
 
