@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -44,11 +43,12 @@ class FalSeedanceAdapter:
             prompt = f"{prompt}\nConstraints: {', '.join(job.negative_constraints)}"
 
         duration = min(max(job.duration or 5, 4), 15)
+        aspect_ratio = job.aspect_ratio or "9:16"
         payload = {
             "prompt": prompt,
             "resolution": "720p",
             "duration": str(duration),
-            "aspect_ratio": job.aspect_ratio or "9:16",
+            "aspect_ratio": aspect_ratio,
             "generate_audio": False,
             "bitrate_mode": "standard",
         }
@@ -75,6 +75,10 @@ class FalSeedanceAdapter:
             raise RuntimeError("Seedance provider returned no video URL.")
 
         request_id = data.get("request_id") or data.get("requestId") or response.headers.get("x-fal-request-id", "")
+        # Export requires concrete WxH dimensions. For the MVP's 9:16 profile,
+        # 720p maps deterministically to 720x1280; keep the provider request as
+        # 720p while normalizing persisted metadata for downstream export.
+        resolution = "720x1280" if aspect_ratio == "9:16" else payload["resolution"]
         return {
             "provider": "fal",
             "model": "bytedance/seedance-2.0/text-to-video",
@@ -82,7 +86,7 @@ class FalSeedanceAdapter:
             "asset_url": video_url,
             "content_type": video.get("content_type", "video/mp4") if isinstance(video, dict) else "video/mp4",
             "file_name": video.get("file_name", "video.mp4") if isinstance(video, dict) else "video.mp4",
-            "resolution": payload["resolution"],
+            "resolution": resolution,
             "duration": duration,
-            "aspect_ratio": payload["aspect_ratio"],
+            "aspect_ratio": aspect_ratio,
         }
