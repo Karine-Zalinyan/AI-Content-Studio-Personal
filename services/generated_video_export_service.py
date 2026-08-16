@@ -180,6 +180,9 @@ class GeneratedVideoExportService:
         return f"{width}x{height}"
 
     def _output_dimensions(self, assets: Sequence[GeneratedAsset]) -> tuple[int, int]:
+        if not assets:
+            raise RuntimeError("No resolved generated clips available for export.")
+
         dimensions: list[tuple[int, int]] = []
         for asset in assets:
             width, height = self._resolution_dimensions(asset)
@@ -204,7 +207,7 @@ class GeneratedVideoExportService:
 
     @staticmethod
     def _resolution_dimensions(asset: GeneratedAsset) -> tuple[int, int]:
-        match = re.search(r"(\d+)\s*[xX×]\s*(\d+)", asset.resolution.strip())
+        match = re.search(r"(\d+)\s*[xX×]\s*(\d+)", str(asset.resolution or "").strip())
         if not match:
             return (0, 0)
         return int(match.group(1)), int(match.group(2))
