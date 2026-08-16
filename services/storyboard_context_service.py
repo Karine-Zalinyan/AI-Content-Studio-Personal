@@ -13,13 +13,16 @@ class StoryboardContextService:
     def create(self, project: Project, universe: Universe | None = None) -> StoryboardContext:
         """Resolve only the entities explicitly referenced by ``project``.
 
-        A standalone Project produces a clear empty context. If a Universe is
-        supplied, its identity must match the Project reference; no implicit
-        characters or locations are invented.
+        A standalone Project produces a clear empty Universe context but still
+        gets a minimal shot from its topic so it remains executable by the
+        downstream generation planner. If a Universe is supplied, its identity
+        must match the Project reference; no implicit characters or locations
+        are invented.
         """
         reference = project.universe_ref
         if reference is None:
-            return StoryboardContext(project_topic=project.topic)
+            shots = [StoryboardShot(scene_number=1, goal=project.topic)] if project.topic else []
+            return StoryboardContext(project_topic=project.topic, shots=shots)
 
         if universe is None:
             raise ValueError("Universe is required for a Universe-aware Project.")
