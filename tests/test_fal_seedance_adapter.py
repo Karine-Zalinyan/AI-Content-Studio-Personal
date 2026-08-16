@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 
@@ -38,7 +40,7 @@ def test_success_maps_request_and_normalizes_response() -> None:
         captured["method"] = request.method
         captured["url"] = str(request.url)
         captured["headers"] = dict(request.headers)
-        captured["json"] = request.read().decode()
+        captured["json"] = json.loads(request.read().decode())
         return httpx.Response(
             200,
             json={
@@ -58,9 +60,9 @@ def test_success_maps_request_and_normalizes_response() -> None:
     assert captured["method"] == "POST"
     assert captured["url"].endswith("/bytedance/seedance-2.0/text-to-video")
     assert captured["headers"]["authorization"] == "Key test-key"
-    assert '"duration": "15"' in captured["json"]
-    assert '"aspect_ratio": "9:16"' in captured["json"]
-    assert '"resolution": "720p"' in captured["json"]
+    assert captured["json"]["duration"] == "15"
+    assert captured["json"]["aspect_ratio"] == "9:16"
+    assert captured["json"]["resolution"] == "720p"
     assert result["provider"] == "fal"
     assert result["request_id"] == "req-123"
     assert result["asset_url"] == "https://example.com/generated.mp4"
