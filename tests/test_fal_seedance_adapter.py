@@ -64,6 +64,7 @@ def test_success_maps_request_and_normalizes_response() -> None:
     assert result["provider"] == "fal"
     assert result["request_id"] == "req-123"
     assert result["asset_url"] == "https://example.com/generated.mp4"
+    assert result["resolution"] == "720x1280"
 
 
 def test_negative_constraints_are_appended_without_mutating_job() -> None:
