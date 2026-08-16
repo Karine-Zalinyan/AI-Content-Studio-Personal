@@ -1,0 +1,1 @@
+"""External media provider adapters."""
