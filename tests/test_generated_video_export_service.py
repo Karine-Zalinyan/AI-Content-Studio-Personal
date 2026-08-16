@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from models.project import GeneratedAsset
+import services.generated_video_export_service as export_module
 from services.generated_video_export_service import GeneratedVideoExportService
 from services.generation_executor_service import ExecutionReport, ExecutionResult, ExecutionStatus
 
@@ -71,8 +72,8 @@ def test_exports_clips_in_execution_order_to_deterministic_path(tmp_path) -> Non
     ]
     seen: list[str] = []
 
-    def assembler(clips: list[Path], destination: Path) -> None:
-        seen.extend(path.name for path in clips)
+    def assembler(clips: list[GeneratedAsset], destination: Path) -> None:
+        seen.extend(Path(asset.file_path).name for asset in clips)
         destination.write_bytes(b"joined-video")
 
     video = GeneratedVideoExportService(tmp_path / "exports", assembler=assembler).export(report, assets)
@@ -80,6 +81,7 @@ def test_exports_clips_in_execution_order_to_deterministic_path(tmp_path) -> Non
     assert seen == ["scene-1.mp4", "scene-2.mp4", "scene-3.mp4"]
     assert video.file_path == str((tmp_path / "exports" / "My_Test_Project_9x16.mp4").resolve())
     assert Path(video.file_path).read_bytes() == b"joined-video"
+    assert video.resolution == "1080x1920"
     assert video.metadata["scene_numbers"] == [1, 2, 3]
     assert video.metadata["aspect_ratio"] == "9:16"
     assert video.format == "mp4"
@@ -110,7 +112,7 @@ def test_failed_generation_result_prevents_partial_export(tmp_path) -> None:
     assets = [_asset(tmp_path, name="scene-1.mp4", scene_number=1, job_id="gen-1", sequence=1)]
     calls = 0
 
-    def assembler(clips: list[Path], destination: Path) -> None:
+    def assembler(clips: list[GeneratedAsset], destination: Path) -> None:
         nonlocal calls
         calls += 1
         destination.write_bytes(b"should-not-run")
@@ -193,3 +195,45 @@ def test_unreadable_asset_path_is_rejected(tmp_path) -> None:
 
     with pytest.raises(RuntimeError, match="missing or unreadable"):
         GeneratedVideoExportService(tmp_path).export(report, [asset])
+
+
+def test_default_ffmpeg_concat_reencodes_to_real_output_resolution(tmp_path, monkeypatch) -> None:
+    report = ExecutionReport(
+        project_topic="Concat",
+        results=[
+            _result(job_id="gen-1", scene_number=1, sequence=1),
+            _result(job_id="gen-2", scene_number=2, sequence=2),
+        ],
+    )
+    assets = [
+        _asset(tmp_path, name="scene-1.mp4", scene_number=1, job_id="gen-1", sequence=1, resolution="720x1280"),
+        _asset(tmp_path, name="scene-2.mp4", scene_number=2, job_id="gen-2", sequence=2, resolution="1080x1920"),
+    ]
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], *, check: bool, capture_output: bool, text: bool):
+        del check, capture_output, text
+        commands.append(command)
+        Path(command[-1]).write_bytes(b"joined-video")
+
+        class Result:
+            returncode = 0
+            stderr = ""
+            stdout = ""
+
+        return Result()
+
+    monkeypatch.setattr(export_module.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(export_module.subprocess, "run", fake_run)
+
+    video = GeneratedVideoExportService(tmp_path / "exports").export(report, assets)
+
+    assert video.resolution == "720x1280"
+    assert len(commands) == 1
+    command = commands[0]
+    assert "-filter_complex" in command
+    filter_graph = command[command.index("-filter_complex") + 1]
+    assert "scale=720:1280" in filter_graph
+    assert "concat=n=2:v=1:a=0[vout]" in filter_graph
+    assert "copy" not in command
+    assert command[command.index("-c:v") + 1] == "libx264"

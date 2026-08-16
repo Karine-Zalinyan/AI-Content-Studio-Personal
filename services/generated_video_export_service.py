@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
-import tempfile
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -13,7 +12,7 @@ from models.project import GeneratedAsset, VideoOutput
 from services.generation_executor_service import ExecutionReport, ExecutionStatus
 
 # The assembler must write the final MP4 bytes to the provided destination path.
-ClipAssembler = Callable[[Sequence[Path], Path], None]
+ClipAssembler = Callable[[Sequence[GeneratedAsset], Path], None]
 
 
 class GeneratedVideoExportService:
@@ -45,12 +44,13 @@ class GeneratedVideoExportService:
         ordered_assets = self._resolve_assets(report, assets)
         for asset in ordered_assets:
             self._validate_asset(asset)
+        output_resolution = self._output_resolution(ordered_assets)
 
         destination = self._build_output_path(report.project_topic)
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_suffix(destination.suffix + ".part")
         try:
-            self._assembler([Path(asset.file_path) for asset in ordered_assets], temporary)
+            self._assembler(ordered_assets, temporary)
             if not temporary.exists() or not temporary.is_file():
                 raise RuntimeError("Generated video export did not produce an MP4 artifact.")
             temporary.replace(destination)
@@ -62,7 +62,7 @@ class GeneratedVideoExportService:
         return VideoOutput(
             file_path=str(destination.resolve()),
             duration=int(round(total_duration)),
-            resolution="9:16",
+            resolution=output_resolution,
             format="mp4",
             metadata={
                 "aspect_ratio": "9:16",
@@ -125,54 +125,66 @@ class GeneratedVideoExportService:
         slug = re.sub(r"_+", "_", slug).strip("_")
         return self._output_dir / f"{slug or 'project'}_9x16.mp4"
 
-    def _assemble_clips(self, clips: Sequence[Path], destination: Path) -> None:
-        if len(clips) == 1:
-            shutil.copyfile(clips[0], destination)
+    def _assemble_clips(self, clips: Sequence[GeneratedAsset], destination: Path) -> None:
+        clip_paths = [Path(asset.file_path) for asset in clips]
+        if len(clip_paths) == 1:
+            shutil.copyfile(clip_paths[0], destination)
             return
 
         ffmpeg = shutil.which("ffmpeg")
         if not ffmpeg:
             raise RuntimeError("ffmpeg is required to export multiple generated clips.")
 
-        manifest_path: Path | None = None
-        try:
-            lines = []
-            for path in clips:
-                escaped = str(path).replace("\\", "\\\\").replace("'", "\\'")
-                lines.append(f"file '{escaped}'")
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
-                suffix=".txt",
-                dir=destination.parent,
-                delete=False,
-            ) as handle:
-                handle.write("\n".join(lines))
-                manifest_path = Path(handle.name)
-            completed = subprocess.run(
-                [
-                    ffmpeg,
-                    "-y",
-                    "-f",
-                    "concat",
-                    "-safe",
-                    "0",
-                    "-i",
-                    str(manifest_path),
-                    "-c",
-                    "copy",
-                    str(destination),
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
+        target_width, target_height = self._output_dimensions(clips)
+        filter_parts = []
+        concat_inputs = []
+        command = [ffmpeg, "-y"]
+        for index, clip_path in enumerate(clip_paths):
+            command.extend(["-i", str(clip_path)])
+            filter_parts.append(
+                f"[{index}:v]scale={target_width}:{target_height}:force_original_aspect_ratio=decrease,"
+                f"pad={target_width}:{target_height}:(ow-iw)/2:(oh-ih)/2,"
+                "setsar=1,format=yuv420p,setpts=PTS-STARTPTS"
+                f"[v{index}]"
             )
-            if completed.returncode != 0:
-                details = completed.stderr.strip() or completed.stdout.strip() or "unknown ffmpeg error"
-                raise RuntimeError(f"Generated video export failed: {details}")
-        finally:
-            if manifest_path is not None:
-                manifest_path.unlink(missing_ok=True)
+            concat_inputs.append(f"[v{index}]")
+
+        filter_parts.append(f"{''.join(concat_inputs)}concat=n={len(clip_paths)}:v=1:a=0[vout]")
+        command.extend(
+            [
+                "-filter_complex",
+                ";".join(filter_parts),
+                "-map",
+                "[vout]",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
+                str(destination),
+            ]
+        )
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode != 0:
+            details = completed.stderr.strip() or completed.stdout.strip() or "unknown ffmpeg error"
+            raise RuntimeError(f"Generated video export failed: {details}")
+
+    def _output_resolution(self, assets: Sequence[GeneratedAsset]) -> str:
+        width, height = self._output_dimensions(assets)
+        return f"{width}x{height}"
+
+    def _output_dimensions(self, assets: Sequence[GeneratedAsset]) -> tuple[int, int]:
+        width, height = self._resolution_dimensions(assets[0])
+        if width == 0 or height == 0:
+            source = Path(assets[0].file_path).name
+            raise RuntimeError(f"Generated asset '{source}' is missing an exportable resolution.")
+        return width, height
 
     @staticmethod
     def _aspect_ratio(asset: GeneratedAsset) -> str:
@@ -186,6 +198,13 @@ class GeneratedVideoExportService:
         if normalized:
             return normalized
         return ""
+
+    @staticmethod
+    def _resolution_dimensions(asset: GeneratedAsset) -> tuple[int, int]:
+        match = re.search(r"(\d+)\s*[xX×]\s*(\d+)", asset.resolution.strip())
+        if not match:
+            return (0, 0)
+        return int(match.group(1)), int(match.group(2))
 
     @staticmethod
     def _normalize_ratio(value: str) -> str:
