@@ -34,21 +34,24 @@ def _asset(
     scene_number: int,
     job_id: str,
     sequence: int,
-    resolution: str = "9:16",
+    resolution: str = "1080x1920",
+    aspect_ratio: str | None = "9:16",
 ) -> GeneratedAsset:
     path = tmp_path / name
     path.write_bytes(name.encode("utf-8"))
+    metadata = {
+        "job_id": job_id,
+        "sequence": sequence,
+    }
+    if aspect_ratio is not None:
+        metadata["aspect_ratio"] = aspect_ratio
     return GeneratedAsset(
         scene_number=scene_number,
         provider="fal",
         file_path=str(path),
         duration=5.0,
         resolution=resolution,
-        metadata={
-            "job_id": job_id,
-            "sequence": sequence,
-            "aspect_ratio": "9:16",
-        },
+        metadata=metadata,
     )
 
 
@@ -112,7 +115,7 @@ def test_failed_generation_result_prevents_partial_export(tmp_path) -> None:
         calls += 1
         destination.write_bytes(b"should-not-run")
 
-    with pytest.raises(RuntimeError, match="failed generation jobs: gen-2"):
+    with pytest.raises(RuntimeError, match=r"non-completed generation jobs: gen-2 \(failed\)"):
         GeneratedVideoExportService(tmp_path / "exports", assembler=assembler).export(report, assets)
 
     assert calls == 0
@@ -127,9 +130,25 @@ def test_non_9_16_asset_is_rejected(tmp_path) -> None:
         scene_number=1,
         job_id="gen-1",
         sequence=1,
-        resolution="16:9",
+        resolution="1920x1080",
+        aspect_ratio="16:9",
     )
-    asset.metadata["aspect_ratio"] = "16:9"
+
+    with pytest.raises(RuntimeError, match="not 9:16-compatible"):
+        GeneratedVideoExportService(tmp_path).export(report, [asset])
+
+
+def test_resolution_fallback_rejects_non_9_16_asset(tmp_path) -> None:
+    report = ExecutionReport(project_topic="Wrong Resolution", results=[_result(job_id="gen-1", scene_number=1, sequence=1)])
+    asset = _asset(
+        tmp_path,
+        name="scene-1.mp4",
+        scene_number=1,
+        job_id="gen-1",
+        sequence=1,
+        resolution="1920x1080",
+        aspect_ratio=None,
+    )
 
     with pytest.raises(RuntimeError, match="not 9:16-compatible"):
         GeneratedVideoExportService(tmp_path).export(report, [asset])
@@ -168,7 +187,7 @@ def test_unreadable_asset_path_is_rejected(tmp_path) -> None:
         provider="fal",
         file_path=str(bad_path),
         duration=5.0,
-        resolution="9:16",
+        resolution="1080x1920",
         metadata={"job_id": "gen-1", "sequence": 1, "aspect_ratio": "9:16"},
     )
 

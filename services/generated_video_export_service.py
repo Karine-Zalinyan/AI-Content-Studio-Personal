@@ -5,12 +5,14 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+import tempfile
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from models.project import GeneratedAsset, VideoOutput
 from services.generation_executor_service import ExecutionReport, ExecutionStatus
 
+# The assembler must write the final MP4 bytes to the provided destination path.
 ClipAssembler = Callable[[Sequence[Path], Path], None]
 
 
@@ -31,15 +33,16 @@ class GeneratedVideoExportService:
         if not report.results:
             raise ValueError("Execution report has no generated clips to export.")
 
-        failed_jobs = [result.job_id for result in report.results if result.status == ExecutionStatus.FAILED]
-        if failed_jobs:
-            joined = ", ".join(failed_jobs)
-            raise RuntimeError(f"Cannot export with failed generation jobs: {joined}")
+        incomplete_jobs = [
+            f"{result.job_id} ({result.status.value})"
+            for result in report.results
+            if result.status != ExecutionStatus.COMPLETED
+        ]
+        if incomplete_jobs:
+            joined = ", ".join(incomplete_jobs)
+            raise RuntimeError(f"Cannot export with non-completed generation jobs: {joined}")
 
         ordered_assets = self._resolve_assets(report, assets)
-        if not ordered_assets:
-            raise ValueError("No persisted generated clips are available for export.")
-
         for asset in ordered_assets:
             self._validate_asset(asset)
 
@@ -57,7 +60,7 @@ class GeneratedVideoExportService:
 
         total_duration = sum(max(asset.duration, 0.0) for asset in ordered_assets)
         return VideoOutput(
-            file_path=str(destination),
+            file_path=str(destination.resolve()),
             duration=int(round(total_duration)),
             resolution="9:16",
             format="mp4",
@@ -78,7 +81,9 @@ class GeneratedVideoExportService:
             for asset in assets
             if asset.metadata.get("job_id")
         }
-        assets_by_scene = {asset.scene_number: asset for asset in assets}
+        scene_assets: dict[int, list[GeneratedAsset]] = {}
+        for asset in assets:
+            scene_assets.setdefault(asset.scene_number, []).append(asset)
 
         ordered_assets: list[GeneratedAsset] = []
         ordered_results = sorted(
@@ -86,7 +91,14 @@ class GeneratedVideoExportService:
             key=lambda result: result.sequence,
         )
         for result in ordered_results:
-            asset = assets_by_job_id.get(result.job_id) or assets_by_scene.get(result.scene_number)
+            asset = assets_by_job_id.get(result.job_id)
+            if asset is None:
+                scene_matches = scene_assets.get(result.scene_number, [])
+                if len(scene_matches) > 1:
+                    raise RuntimeError(
+                        f"Multiple persisted generated assets found for scene {result.scene_number}."
+                    )
+                asset = scene_matches[0] if scene_matches else None
             if asset is None:
                 raise RuntimeError(
                     f"Missing persisted generated asset for job '{result.job_id}' (scene {result.scene_number})."
@@ -96,8 +108,6 @@ class GeneratedVideoExportService:
 
     def _validate_asset(self, asset: GeneratedAsset) -> None:
         source = Path(asset.file_path)
-        if not source.exists() or not source.is_file():
-            raise RuntimeError(f"Generated asset is missing or unreadable: {source}")
         try:
             with source.open("rb"):
                 pass
@@ -124,16 +134,21 @@ class GeneratedVideoExportService:
         if not ffmpeg:
             raise RuntimeError("ffmpeg is required to export multiple generated clips.")
 
-        manifest = destination.with_suffix(".txt")
+        manifest_path: Path | None = None
         try:
             lines = []
             for path in clips:
-                escaped = str(path).replace("'", "'\\''")
+                escaped = str(path).replace("\\", "\\\\").replace("'", "\\'")
                 lines.append(f"file '{escaped}'")
-            manifest.write_text(
-                "\n".join(lines),
+            with tempfile.NamedTemporaryFile(
+                mode="w",
                 encoding="utf-8",
-            )
+                suffix=".txt",
+                dir=destination.parent,
+                delete=False,
+            ) as handle:
+                handle.write("\n".join(lines))
+                manifest_path = Path(handle.name)
             completed = subprocess.run(
                 [
                     ffmpeg,
@@ -143,7 +158,7 @@ class GeneratedVideoExportService:
                     "-safe",
                     "0",
                     "-i",
-                    str(manifest),
+                    str(manifest_path),
                     "-c",
                     "copy",
                     str(destination),
@@ -152,12 +167,12 @@ class GeneratedVideoExportService:
                 capture_output=True,
                 text=True,
             )
+            if completed.returncode != 0:
+                details = completed.stderr.strip() or completed.stdout.strip() or "unknown ffmpeg error"
+                raise RuntimeError(f"Generated video export failed: {details}")
         finally:
-            manifest.unlink(missing_ok=True)
-
-        if completed.returncode != 0:
-            details = completed.stderr.strip() or completed.stdout.strip() or "unknown ffmpeg error"
-            raise RuntimeError(f"Generated video export failed: {details}")
+            if manifest_path is not None:
+                manifest_path.unlink(missing_ok=True)
 
     @staticmethod
     def _aspect_ratio(asset: GeneratedAsset) -> str:
@@ -170,11 +185,7 @@ class GeneratedVideoExportService:
         normalized = GeneratedVideoExportService._normalize_ratio(resolution)
         if normalized:
             return normalized
-
-        match = re.search(r"(\d+)\s*[xX×]\s*(\d+)", resolution)
-        if not match:
-            return ""
-        return GeneratedVideoExportService._normalize_ratio(f"{match.group(1)}:{match.group(2)}")
+        return ""
 
     @staticmethod
     def _normalize_ratio(value: str) -> str:
