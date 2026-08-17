@@ -35,6 +35,17 @@ python web_ui.py
 
 The browser MVP intentionally exposes only the first production loop: topic → existing storyboard/generation pipeline → 9:16 MP4 preview/export. It uses the standard library HTTP server, so no frontend framework is required.
 
+### Container deployment
+
+The web MVP can also run as a small container. The image includes `ffmpeg`, which is required when multiple generated clips must be assembled into one MP4.
+
+```bash
+docker build -t ai-content-studio .
+docker run --rm -p 8787:8787 --env-file .env ai-content-studio
+```
+
+The container listens on `0.0.0.0` and honors `PORT` (default `8787`). For a hosted deployment, keep provider secrets in the host's secret/environment configuration rather than committing `.env`.
+
 ---
 
 ## Project structure
@@ -43,6 +54,9 @@ The browser MVP intentionally exposes only the first production loop: topic → 
 AI-Content-Studio-Personal/
 ├── main.py                  # CLI entry point
 ├── web_ui.py                # Thin browser MVP entry point
+├── run_web.py               # Deployment entry point (HOST/PORT aware)
+├── Dockerfile               # Minimal web deployment image
+├── .dockerignore
 ├── .env.example             # Environment variable template
 ├── requirements.txt
 │
@@ -114,6 +128,8 @@ Keep business logic in agents/services rather than UI handlers.
 | `OUTPUT_DIR`        | output                     | Generated-content directory  |
 | `ASSETS_DIR`        | assets                     | Static-assets directory      |
 | `LOG_FILE`          | _(empty)_                  | Optional log file path       |
+| `HOST`              | `0.0.0.0` (container)      | Web server bind address      |
+| `PORT`              | `8787`                     | Web server port              |
 
 ---
 
