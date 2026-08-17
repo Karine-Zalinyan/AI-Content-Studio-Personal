@@ -22,7 +22,6 @@ from urllib.parse import parse_qs, urlparse
 
 from config.settings import settings
 from models.project import Project
-from services.generated_video_export_service import GeneratedVideoExportService
 from services.generation_pipeline_service import GenerationPipelineService
 from services.generation_planner_service import GenerationPlanner
 from services.storyboard_context_service import StoryboardContextService
