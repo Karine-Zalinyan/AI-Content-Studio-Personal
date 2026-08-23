@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = Field(default="")
     openrouter_api_key: str = Field(default="")
     openrouter_model: str = Field(default="openai/gpt-4o-mini")
+    pexels_api_key: str = Field(default="")
 
     # ── Paths ─────────────────────────────────────────────────────────────────
     output_dir: Path = Field(default=Path("output"))

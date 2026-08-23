@@ -31,12 +31,26 @@ class FakePipeline:
         )
 
 
-def _start_server(monkeypatch, tmp_path: Path, *, fail: bool = False):
+class FakeStockVideos:
+    def __init__(self, results=None, error: Exception | None = None) -> None:
+        self.results = [] if results is None else results
+        self.error = error
+        self.calls: list[dict[str, object]] = []
+
+    def search(self, query: str, *, orientation: str = "portrait", per_page: int = 6):
+        self.calls.append({"query": query, "orientation": orientation, "per_page": per_page})
+        if self.error is not None:
+            raise self.error
+        return self.results
+
+
+def _start_server(monkeypatch, tmp_path: Path, *, fail: bool = False, stock_videos: FakeStockVideos | None = None):
     history = ProjectHistoryService(tmp_path / "studio.db")
     history_web = ProjectHistoryWebService(history, tmp_path)
     monkeypatch.setattr(web_ui, "HISTORY", history)
     monkeypatch.setattr(web_ui, "HISTORY_WEB", history_web)
     monkeypatch.setattr(web_ui, "JOBS", web_ui.JobStore())
+    monkeypatch.setattr(web_ui, "STOCK_VIDEOS", stock_videos or FakeStockVideos())
     monkeypatch.setattr(web_ui, "StoryboardContextService", lambda: SimpleNamespace(create=lambda project: project))
     monkeypatch.setattr(web_ui, "GenerationPlanner", lambda: SimpleNamespace(create=lambda storyboard: storyboard))
     monkeypatch.setattr(
@@ -79,6 +93,13 @@ def _poll_job(server, job_id: str) -> dict[str, object]:
     raise AssertionError("job did not reach a terminal state")
 
 
+def _get_json(server, path: str) -> tuple[int, dict[str, object]]:
+    connection = HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+    connection.request("GET", path)
+    response = connection.getresponse()
+    return response.status, json.loads(response.read())
+
+
 def test_browser_generation_persists_and_survives_restart(monkeypatch, tmp_path: Path) -> None:
     server, history, _ = _start_server(monkeypatch, tmp_path)
     try:
@@ -102,6 +123,68 @@ def test_browser_generation_persists_and_survives_restart(monkeypatch, tmp_path:
         restarted = restarted_web.recent()
         assert restarted[0]["status"] == "done"
         assert restarted[0]["video_url"] == "/output/e2e/generated.mp4"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_stock_video_search_returns_ui_safe_results(monkeypatch, tmp_path: Path) -> None:
+    stock_videos = FakeStockVideos(
+        results=[
+            {
+                "id": "video-1",
+                "duration_seconds": 11,
+                "width": 720,
+                "height": 1280,
+                "orientation": "portrait",
+                "thumbnail_url": "https://images.pexels.com/videos/1.jpeg",
+                "source_url": "https://www.pexels.com/video/1/",
+                "preview_url": "https://player.pexels.com/videos/1.mp4",
+            }
+        ]
+    )
+    server, _, _ = _start_server(monkeypatch, tmp_path, stock_videos=stock_videos)
+    try:
+        status, payload = _get_json(server, "/api/stock-videos?query=night+city")
+
+        assert status == 200
+        assert payload["results"][0]["orientation"] == "portrait"
+        assert payload["results"][0]["preview_url"].startswith("https://")
+        assert stock_videos.calls == [{"query": "night city", "orientation": "portrait", "per_page": 6}]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_stock_video_search_returns_empty_results(monkeypatch, tmp_path: Path) -> None:
+    server, _, _ = _start_server(monkeypatch, tmp_path, stock_videos=FakeStockVideos(results=[]))
+    try:
+        status, payload = _get_json(server, "/api/stock-videos?query=rare+query")
+
+        assert status == 200
+        assert payload == {"results": []}
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_stock_video_search_provider_failure_hides_secret(monkeypatch, tmp_path: Path) -> None:
+    secret = "pexels-super-secret"
+    server, _, _ = _start_server(
+        monkeypatch,
+        tmp_path,
+        stock_videos=FakeStockVideos(error=RuntimeError(f"provider failed: {secret}")),
+    )
+    try:
+        status, payload = _get_json(server, "/api/stock-videos?query=storm")
+        html_status, html_payload = _get_json(server, "/api/stock-videos?query=")
+
+        assert status == 502
+        assert payload == {"error": "Stock video search unavailable"}
+        assert secret not in json.dumps(payload)
+        assert html_status == 400
+        assert html_payload == {"error": "Query cannot be empty"}
+        assert secret not in web_ui.HTML
     finally:
         server.shutdown()
         server.server_close()

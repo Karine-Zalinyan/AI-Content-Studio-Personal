@@ -42,11 +42,15 @@ def test_mvp_html_exposes_only_the_core_creation_controls() -> None:
     assert "Generate video" in web_ui.HTML
     assert "/api/jobs/" in web_ui.HTML
     assert "/api/history" in web_ui.HTML
+    assert "/api/stock-videos?query=" in web_ui.HTML
+    assert "Free Stock Video Search" in web_ui.HTML
+    assert "Search free stock video" in web_ui.HTML
     assert "Recent Projects" in web_ui.HTML
     assert "Export MP4" in web_ui.HTML
     assert "9:16 MP4" in web_ui.HTML
     assert "provider controls" not in web_ui.HTML.lower()
     assert "billing" not in web_ui.HTML.lower()
+    assert "PEXELS_API_KEY" not in web_ui.HTML
 
 
 def test_output_path_is_restricted_to_output_root(tmp_path: Path) -> None:
