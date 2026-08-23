@@ -70,7 +70,7 @@ def test_search_normalizes_portrait_results_and_prefers_highest_res_preview() ->
     ]
 
 
-def test_search_filters_insecure_preview_links() -> None:
+def test_search_ignores_higher_res_insecure_preview_links() -> None:
     client = FakeClient(
         {
             "videos": [
@@ -78,6 +78,8 @@ def test_search_filters_insecure_preview_links() -> None:
                     "id": 8,
                     "url": "https://www.pexels.com/video/8/",
                     "video_files": [
+                        # The larger HTTP asset must be ignored even though it has
+                        # the highest resolution in the provider payload.
                         {"width": 720, "height": 1280, "link": "http://player.pexels.com/videos/8-insecure.mp4"},
                         {"width": 360, "height": 640, "link": "https://player.pexels.com/videos/8-secure.mp4"},
                     ],
