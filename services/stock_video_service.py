@@ -74,6 +74,7 @@ class StockVideoSearchService:
 
         return {
             "id": str(video.get("id", "")),
+            "title": self._title(video),
             "duration_seconds": self._as_int(video.get("duration")),
             "width": width,
             "height": height,
@@ -87,18 +88,22 @@ class StockVideoSearchService:
         if not isinstance(files, list):
             return None
         candidates: list[tuple[int, str]] = []
+        fallback_link: str | None = None
         for item in files:
             if not isinstance(item, dict):
                 continue
             link = self._safe_https_url(item.get("link"))
             if not link:
                 continue
+            if fallback_link is None:
+                fallback_link = link
             width = self._as_int(item.get("width")) or 0
             height = self._as_int(item.get("height")) or 0
-            candidates.append((width * height, link))
+            if width > 0 and height > 0:
+                candidates.append((width * height, link))
         if not candidates:
-            return None
-        candidates.sort(key=lambda value: value[0] or 1, reverse=True)
+            return fallback_link
+        candidates.sort(key=lambda value: value[0], reverse=True)
         return candidates[0][1]
 
     def _safe_https_url(self, value: Any) -> str | None:
@@ -123,3 +128,12 @@ class StockVideoSearchService:
             return int(value)
         except (TypeError, ValueError):
             return None
+
+    def _title(self, video: dict[str, Any]) -> str:
+        user = video.get("user")
+        if isinstance(user, dict):
+            name = user.get("name")
+            if isinstance(name, str) and name.strip():
+                return f"Clip by {name.strip()}"
+        identifier = str(video.get("id", "")).strip()
+        return f"Clip {identifier}" if identifier else "Stock video clip"

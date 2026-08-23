@@ -33,6 +33,7 @@ def test_search_normalizes_portrait_results_and_prefers_highest_res_preview() ->
                     "duration": 12,
                     "width": 720,
                     "height": 1280,
+                    "user": {"name": "Pexels Creator"},
                     "url": "https://www.pexels.com/video/7/",
                     "image": "https://images.pexels.com/videos/7.jpeg",
                     "video_files": [
@@ -57,6 +58,7 @@ def test_search_normalizes_portrait_results_and_prefers_highest_res_preview() ->
     assert results == [
         {
             "id": "7",
+            "title": "Clip by Pexels Creator",
             "duration_seconds": 12,
             "width": 720,
             "height": 1280,
