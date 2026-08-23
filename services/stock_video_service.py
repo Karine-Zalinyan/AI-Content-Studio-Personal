@@ -103,7 +103,7 @@ class StockVideoSearchService:
                 candidates.append((width * height, link))
         if not candidates:
             return fallback_link
-        candidates.sort(key=lambda value: value[0], reverse=True)
+        candidates.sort(key=lambda entry: entry[0], reverse=True)
         return candidates[0][1]
 
     def _safe_https_url(self, value: Any) -> str | None:

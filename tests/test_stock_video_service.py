@@ -68,3 +68,25 @@ def test_search_normalizes_portrait_results_and_prefers_highest_res_preview() ->
             "preview_url": "https://player.pexels.com/videos/7-large.mp4",
         }
     ]
+
+
+def test_search_filters_insecure_preview_links() -> None:
+    client = FakeClient(
+        {
+            "videos": [
+                {
+                    "id": 8,
+                    "url": "https://www.pexels.com/video/8/",
+                    "video_files": [
+                        {"width": 720, "height": 1280, "link": "http://player.pexels.com/videos/8-insecure.mp4"},
+                        {"width": 360, "height": 640, "link": "https://player.pexels.com/videos/8-secure.mp4"},
+                    ],
+                }
+            ]
+        }
+    )
+    service = StockVideoSearchService(api_key="pexels-key", client=client)
+
+    results = service.search("forest trail")
+
+    assert results[0]["preview_url"] == "https://player.pexels.com/videos/8-secure.mp4"
