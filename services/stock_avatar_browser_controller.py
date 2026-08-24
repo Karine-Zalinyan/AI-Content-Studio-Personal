@@ -16,9 +16,11 @@ class StockAvatarBrowserController:
         self,
         history: ProjectHistoryService,
         assembly: StockAvatarWebService | None = None,
+        output_root: str | Path | None = None,
     ) -> None:
         self.history = history
         self.assembly = assembly or StockAvatarWebService()
+        self.output_root = Path(output_root).resolve() if output_root is not None else None
 
     def assemble(
         self,
@@ -38,6 +40,13 @@ class StockAvatarBrowserController:
         if not output_file.is_file():
             raise RuntimeError("Assembly completed without producing an output file")
 
+        stored_output_path = str(output_file)
+        if self.output_root is not None:
+            try:
+                stored_output_path = str(output_file.relative_to(self.output_root))
+            except ValueError as exc:
+                raise RuntimeError("Assembly output is outside the configured output root") from exc
+
         project_id = self.history.create_project(topic=project.topic)
         job_id = self.history.create_job(project_id)
         metadata = dict(project.video.metadata)
@@ -46,13 +55,13 @@ class StockAvatarBrowserController:
         self.history.update_job(
             job_id,
             status="done",
-            output_path=str(output_file),
+            output_path=stored_output_path,
             output_metadata=metadata,
         )
         return {
             "project_id": project_id,
             "job_id": job_id,
             "status": "done",
-            "output_path": str(output_file),
+            "output_path": stored_output_path,
             "metadata": metadata,
         }
