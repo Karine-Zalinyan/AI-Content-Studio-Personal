@@ -26,7 +26,11 @@ class FakeAssembly:
 
 def test_controller_persists_completed_stock_avatar_job(tmp_path):
     history = ProjectHistoryService(tmp_path / "studio.db")
-    controller = StockAvatarBrowserController(history, assembly=FakeAssembly())
+    controller = StockAvatarBrowserController(
+        history,
+        assembly=FakeAssembly(),
+        output_root=tmp_path,
+    )
 
     result = controller.assemble(
         topic="A kind moment",
@@ -36,12 +40,12 @@ def test_controller_persists_completed_stock_avatar_job(tmp_path):
     )
 
     assert result["status"] == "done"
-    assert result["output_path"] == "kindness.mp4"
+    assert result["output_path"] == "nested/kindness.mp4"
     job = history.get_job(result["job_id"])
     assert job is not None
     assert job["topic"] == "A kind moment"
     assert job["status"] == "done"
-    assert job["output_path"] == "kindness.mp4"
+    assert job["output_path"] == "nested/kindness.mp4"
     assert job["output_metadata"]["assembly_mode"] == "stock_avatar"
     assert job["output_metadata"]["stock_clip_count"] == 1
 
@@ -56,6 +60,25 @@ def test_controller_rejects_missing_output(tmp_path):
             stock_clips=[{"preview_url": "https://cdn.example/clip.mp4"}],
             avatar_reference=None,
             output_path=tmp_path / "missing.mp4",
+        )
+
+    assert history.recent_projects() == []
+
+
+def test_controller_rejects_output_outside_configured_root(tmp_path):
+    history = ProjectHistoryService(tmp_path / "studio.db")
+    controller = StockAvatarBrowserController(
+        history,
+        assembly=FakeAssembly(),
+        output_root=tmp_path / "output",
+    )
+
+    with pytest.raises(RuntimeError, match="outside the configured output root"):
+        controller.assemble(
+            topic="Unsafe output",
+            stock_clips=[{"preview_url": "https://cdn.example/clip.mp4"}],
+            avatar_reference=None,
+            output_path=tmp_path / "outside.mp4",
         )
 
     assert history.recent_projects() == []
