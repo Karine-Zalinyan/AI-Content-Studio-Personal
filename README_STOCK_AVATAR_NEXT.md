@@ -1,0 +1,1 @@
+Next integration step: connect StockAvatarWebService to the existing browser UI, add clip selection state, optional Avatar reference, and a dedicated Assemble 9:16 action. Keep paid generation untouched.
