@@ -10,14 +10,14 @@ def test_parse_accepts_json_clip_payload() -> None:
         {
             "topic": "Kindness",
             "stock_clips": '[{"id": "clip-1"}]',
-            "avatar_reference": "avatar.png",
+            "avatar_reference": "https://example.com/avatar.png",
             "output_path": "output/kindness.mp4",
         }
     )
 
     assert result["topic"] == "Kindness"
     assert result["stock_clips"] == [{"id": "clip-1"}]
-    assert result["avatar_reference"] == "avatar.png"
+    assert result["avatar_reference"] == "https://example.com/avatar.png"
     assert result["output_path"] == Path("output/kindness.mp4")
 
 
