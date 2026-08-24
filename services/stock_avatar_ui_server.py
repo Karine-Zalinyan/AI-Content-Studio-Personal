@@ -6,14 +6,13 @@ import json
 import uuid
 from http import HTTPStatus
 from http.server import ThreadingHTTPServer
-from pathlib import Path
-from typing import Any
 
 from config.settings import settings
+from services.project_history_service import ProjectHistoryService
 from services.stock_avatar_browser_api import StockAvatarBrowserRequestAdapter
 from services.stock_avatar_browser_controller import StockAvatarBrowserController
 from services.stock_avatar_web_service import StockAvatarWebService
-from web_ui import HTML as BASE_HTML
+from web_ui import HISTORY, HTML as BASE_HTML
 from web_ui import StudioHandler
 
 
@@ -33,11 +32,10 @@ let selectedStockClips=[];
 function toggleStockSelection(clip, checked){
   const key=String(clip.id||clip.preview_url||clip.source_url||'');
   if(checked){
-    if(selectedStockClips.length>=6){assembleStatus.className='status error';assembleStatus.textContent='Maximum 6 clips.';return false;}
+    if(selectedStockClips.length>=6){assembleStatus.className='status error';assembleStatus.textContent='Maximum 6 clips.';return;}
     if(!selectedStockClips.some(x=>String(x.id||x.preview_url||x.source_url||'')===key))selectedStockClips.push(clip);
   }else selectedStockClips=selectedStockClips.filter(x=>String(x.id||x.preview_url||x.source_url||'')!==key);
   assembleStatus.className='status';assembleStatus.textContent=selectedStockClips.length+' clip(s) selected.';
-  return true;
 }
 const originalRenderStockResults=renderStockResults;
 renderStockResults=function(rows){
@@ -59,7 +57,7 @@ assembleButton.addEventListener('click',async()=>{
     const r=await fetch('/api/stock-avatar/assemble',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({topic:topicValue,stock_clips:selectedStockClips,avatar_reference:avatarInput.value.trim()||null})});
     const d=await r.json();if(!r.ok)throw new Error(d.error||'Assembly failed');
     assembleStatus.className='status ok';assembleStatus.textContent='Done — 9:16 MP4 ready.';
-    const videoUrl='/output/'+encodeURIComponent(d.output_path).replaceAll('%2F','/');
+    const videoUrl='/output/'+d.output_path.split('/').map(encodeURIComponent).join('/');
     preview.innerHTML='<video controls playsinline src="'+videoUrl+'"></video>';
     exportLink.href=videoUrl;exportLink.style.display='block';loadHistory();
   }catch(err){assembleStatus.className='status error';assembleStatus.textContent=err.message;}
@@ -95,7 +93,7 @@ class StockAvatarStudioHandler(StudioHandler):
             request = StockAvatarBrowserRequestAdapter.parse({**payload, "output_path": "pending.mp4"})
             output_path = settings.output_dir / "stock_avatar" / f"{uuid.uuid4().hex}.mp4"
             controller = StockAvatarBrowserController(
-                history=__import__("web_ui", fromlist=["HISTORY"]).HISTORY,
+                history=HISTORY,
                 assembly=StockAvatarWebService(),
                 output_root=settings.output_dir,
             )
