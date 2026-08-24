@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from web_ui import serve
+from services.stock_avatar_ui_server import serve_stock_avatar
 
 
 def _port() -> int:
@@ -20,7 +20,7 @@ def _port() -> int:
 
 def main() -> None:
     host = os.getenv("HOST", "0.0.0.0")
-    serve(host=host, port=_port())
+    serve_stock_avatar(host=host, port=_port())
 
 
 if __name__ == "__main__":
