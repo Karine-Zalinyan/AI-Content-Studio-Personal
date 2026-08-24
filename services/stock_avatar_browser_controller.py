@@ -46,13 +46,13 @@ class StockAvatarBrowserController:
         self.history.update_job(
             job_id,
             status="done",
-            output_path=output_file.name,
+            output_path=str(output_file),
             output_metadata=metadata,
         )
         return {
             "project_id": project_id,
             "job_id": job_id,
             "status": "done",
-            "output_path": output_file.name,
+            "output_path": str(output_file),
             "metadata": metadata,
         }
