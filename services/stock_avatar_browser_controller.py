@@ -10,11 +10,7 @@ from services.stock_avatar_web_service import StockAvatarWebService
 
 
 class StockAvatarBrowserController:
-    """Coordinate validation, assembly, and durable history for browser requests.
-
-    This controller deliberately stays above the existing assembly/domain service
-    and below the HTTP UI. It does not introduce a second generation pipeline.
-    """
+    """Coordinate validation, assembly, and durable history for browser requests."""
 
     def __init__(
         self,
@@ -38,21 +34,25 @@ class StockAvatarBrowserController:
             avatar_reference=avatar_reference,
             output_path=output_path,
         )
+        output_file = Path(output).resolve()
+        if not output_file.is_file():
+            raise RuntimeError("Assembly completed without producing an output file")
+
         project_id = self.history.create_project(topic=project.topic)
         job_id = self.history.create_job(project_id)
-        relative_output = Path(output).name
         metadata = dict(project.video.metadata)
         metadata["stock_clip_count"] = len(stock_clips)
+        metadata["output_filename"] = output_file.name
         self.history.update_job(
             job_id,
             status="done",
-            output_path=relative_output,
+            output_path=output_file.name,
             output_metadata=metadata,
         )
         return {
             "project_id": project_id,
             "job_id": job_id,
             "status": "done",
-            "output_path": relative_output,
+            "output_path": output_file.name,
             "metadata": metadata,
         }
