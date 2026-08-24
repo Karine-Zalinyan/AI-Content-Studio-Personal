@@ -62,7 +62,7 @@ def test_controller_rejects_missing_output(tmp_path):
             output_path=tmp_path / "missing.mp4",
         )
 
-    assert history.recent_projects() == []
+    assert history.list_recent() == []
 
 
 def test_controller_rejects_output_outside_configured_root(tmp_path):
@@ -81,7 +81,7 @@ def test_controller_rejects_output_outside_configured_root(tmp_path):
             output_path=tmp_path / "outside.mp4",
         )
 
-    assert history.recent_projects() == []
+    assert history.list_recent() == []
 
 
 def test_controller_keeps_avatar_reference_out_of_project_identity(tmp_path):
