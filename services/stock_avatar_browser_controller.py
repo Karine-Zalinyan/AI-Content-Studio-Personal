@@ -30,22 +30,29 @@ class StockAvatarBrowserController:
         avatar_reference: str | None,
         output_path: str | Path,
     ) -> dict[str, Any]:
+        requested_output = Path(output_path).resolve()
+        if self.output_root is not None:
+            try:
+                requested_output.relative_to(self.output_root)
+            except ValueError as exc:
+                raise RuntimeError("Assembly output is outside the configured output root") from exc
+
         project, output = self.assembly.assemble_request(
             topic=topic,
             stock_clips=stock_clips,
             avatar_reference=avatar_reference,
-            output_path=output_path,
+            output_path=requested_output,
         )
         output_file = Path(output).resolve()
         if not output_file.is_file():
             raise RuntimeError("Assembly completed without producing an output file")
-
-        stored_output_path = str(output_file)
         if self.output_root is not None:
             try:
                 stored_output_path = str(output_file.relative_to(self.output_root))
             except ValueError as exc:
                 raise RuntimeError("Assembly output is outside the configured output root") from exc
+        else:
+            stored_output_path = str(output_file)
 
         project_id = self.history.create_project(topic=project.topic)
         job_id = self.history.create_job(project_id)
