@@ -8,12 +8,14 @@ from http import HTTPStatus
 from http.server import ThreadingHTTPServer
 
 from config.settings import settings
-from services.project_history_service import ProjectHistoryService
+from services.deployment_health_service import DeploymentHealthService
 from services.stock_avatar_browser_api import StockAvatarBrowserRequestAdapter
 from services.stock_avatar_browser_controller import StockAvatarBrowserController
 from services.stock_avatar_web_service import StockAvatarWebService
 from web_ui import HISTORY, HTML as BASE_HTML
 from web_ui import StudioHandler
+
+HEALTH = DeploymentHealthService(settings.output_dir)
 
 
 def _stock_avatar_html() -> str:
@@ -65,9 +67,6 @@ assembleButton.addEventListener('click',async()=>{
 });
 </script>
 """
-    # The base page defines renderStockResults, stockResults, topic, preview, etc.
-    # before </body>. Append the extension after the base script so those symbols exist
-    # when the extension script is evaluated.
     return BASE_HTML.replace("</body>", panel + "</body>", 1)
 
 
@@ -80,6 +79,11 @@ class StockAvatarStudioHandler(StudioHandler):
     def do_GET(self) -> None:
         if self.path == "/":
             self._send(HTML.encode(), "text/html; charset=utf-8")
+            return
+        if self.path == "/health":
+            payload = HEALTH.status()
+            status = HTTPStatus.OK if payload["status"] == "ok" else HTTPStatus.SERVICE_UNAVAILABLE
+            self._send(json.dumps(payload).encode(), "application/json", status)
             return
         super().do_GET()
 
