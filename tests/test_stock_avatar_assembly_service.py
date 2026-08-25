@@ -25,10 +25,64 @@ def test_safe_https_url_accepts_only_https() -> None:
 
 def test_ffmpeg_error_is_actionable(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     service = StockAvatarAssemblyService(ffmpeg_binary="missing-ffmpeg")
-    monkeypatch.setattr(service, "_download", lambda _url, destination: destination.write_bytes(b"x"))
+    monkeypatch.setattr(service, "_download", lambda _url, destination, **_kwargs: destination.write_bytes(b"x"))
     with pytest.raises(RuntimeError, match="FFmpeg is required"):
         service.assemble(
             Project(topic="demo"),
             [{"preview_url": "https://example.com/video.mp4"}],
             output_path=tmp_path / "out.mp4",
+        )
+
+
+def test_download_rejects_large_content_length(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    class FakeHeaders:
+        def get(self, name: str) -> str | None:
+            return str(StockAvatarAssemblyService.MAX_AVATAR_BYTES + 1) if name == "Content-Length" else None
+
+    class FakeResponse:
+        headers = FakeHeaders()
+
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda *_args, **_kwargs: FakeResponse())
+    service = StockAvatarAssemblyService()
+    with pytest.raises(RuntimeError, match="Avatar exceeds"):
+        service._download(
+            "https://example.com/avatar.png",
+            tmp_path / "avatar.png",
+            max_bytes=service.MAX_AVATAR_BYTES,
+            resource_type="Avatar",
+        )
+
+
+def test_download_streaming_rejects_body_over_limit(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    class FakeHeaders:
+        def get(self, _name: str) -> None:
+            return None
+
+    class FakeResponse:
+        headers = FakeHeaders()
+        chunks = [b"1234", b"5678", b"9"]
+
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self, _size: int) -> bytes:
+            return self.chunks.pop(0) if self.chunks else b""
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda *_args, **_kwargs: FakeResponse())
+    service = StockAvatarAssemblyService()
+    with pytest.raises(RuntimeError, match="Stock clip exceeds"):
+        service._download(
+            "https://example.com/video.mp4",
+            tmp_path / "video.mp4",
+            max_bytes=8,
+            resource_type="Stock clip",
         )
