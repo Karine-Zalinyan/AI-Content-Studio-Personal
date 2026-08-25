@@ -65,7 +65,10 @@ assembleButton.addEventListener('click',async()=>{
 });
 </script>
 """
-    return BASE_HTML.replace("</section>", panel + "</section>", 1)
+    # The base page defines renderStockResults, stockResults, topic, preview, etc.
+    # before </body>. Append the extension after the base script so those symbols exist
+    # when the extension script is evaluated.
+    return BASE_HTML.replace("</body>", panel + "</body>", 1)
 
 
 HTML = _stock_avatar_html()
