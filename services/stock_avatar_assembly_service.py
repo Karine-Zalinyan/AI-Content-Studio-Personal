@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ipaddress
+import socket
 import subprocess
 import urllib.request
 from pathlib import Path
@@ -10,6 +12,19 @@ from typing import Any
 from urllib.parse import urlparse
 
 from models.project import Project
+
+
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Allow redirects only when the destination passes the same URL policy."""
+
+    def __init__(self, validator) -> None:
+        super().__init__()
+        self.validator = validator
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not self.validator(newurl):
+            raise RuntimeError("Redirect target is not a safe HTTPS URL")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 class StockAvatarAssemblyService:
@@ -107,8 +122,11 @@ class StockAvatarAssemblyService:
         self._run(command)
 
     def _download(self, url: str, destination: Path, *, max_bytes: int, resource_type: str) -> None:
+        if not self._safe_https_url(url):
+            raise RuntimeError(f"{resource_type} URL is not a safe HTTPS URL")
+        opener = urllib.request.build_opener(_SafeRedirectHandler(self._safe_https_url))
         request = urllib.request.Request(url, headers={"User-Agent": "AI-Content-Studio/1.0"})
-        with urllib.request.urlopen(request, timeout=self.timeout) as response:
+        with opener.open(request, timeout=self.timeout) as response:
             content_length = response.headers.get("Content-Length")
             if content_length and int(content_length) > max_bytes:
                 raise RuntimeError(f"{resource_type} exceeds the {max_bytes} byte download limit")
@@ -136,9 +154,20 @@ class StockAvatarAssemblyService:
             detail = exc.stderr.decode("utf-8", errors="replace")[-1200:]
             raise RuntimeError(f"FFmpeg assembly failed: {detail}") from exc
 
-    @staticmethod
-    def _safe_https_url(value: Any) -> str | None:
+    @classmethod
+    def _safe_https_url(cls, value: Any) -> str | None:
         if not isinstance(value, str) or not value:
             return None
         parsed = urlparse(value)
-        return value if parsed.scheme == "https" and parsed.netloc else None
+        if parsed.scheme != "https" or not parsed.hostname:
+            return None
+        try:
+            addresses = {
+                ipaddress.ip_address(info[4][0])
+                for info in socket.getaddrinfo(parsed.hostname, parsed.port or 443, type=socket.SOCK_STREAM)
+            }
+        except (OSError, ValueError):
+            return None
+        if not addresses or any(address.is_private or address.is_loopback or address.is_link_local or address.is_multicast or address.is_reserved or address.is_unspecified for address in addresses):
+            return None
+        return value
