@@ -21,6 +21,10 @@ class StockAvatarAssemblyService:
     not add another Python media stack to the project.
     """
 
+    MAX_STOCK_BYTES = 50 * 1024 * 1024
+    MAX_AVATAR_BYTES = 10 * 1024 * 1024
+    DOWNLOAD_CHUNK_BYTES = 64 * 1024
+
     def __init__(self, ffmpeg_binary: str = "ffmpeg", timeout: int = 60) -> None:
         self.ffmpeg_binary = ffmpeg_binary
         self.timeout = timeout
@@ -45,14 +49,14 @@ class StockAvatarAssemblyService:
             avatar_path: Path | None = None
             if avatar_url:
                 avatar_path = root / "avatar.png"
-                self._download(avatar_url, avatar_path)
+                self._download(avatar_url, avatar_path, max_bytes=self.MAX_AVATAR_BYTES, resource_type="Avatar")
 
             for index, clip in enumerate(stock_clips, start=1):
                 source = self._safe_https_url(clip.get("preview_url") or clip.get("source_url"))
                 if not source:
                     raise ValueError(f"Stock clip {index} has no safe HTTPS URL")
                 clip_path = root / f"clip-{index}.mp4"
-                self._download(source, clip_path)
+                self._download(source, clip_path, max_bytes=self.MAX_STOCK_BYTES, resource_type=f"Stock clip {index}")
                 rendered_path = root / f"rendered-{index}.mp4"
                 self._render_clip(clip_path, rendered_path, avatar_path)
                 rendered.append(rendered_path)
@@ -102,10 +106,26 @@ class StockAvatarAssemblyService:
         command += ["-t", "8", "-r", "30", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-an", str(output)]
         self._run(command)
 
-    def _download(self, url: str, destination: Path) -> None:
+    def _download(self, url: str, destination: Path, *, max_bytes: int, resource_type: str) -> None:
         request = urllib.request.Request(url, headers={"User-Agent": "AI-Content-Studio/1.0"})
         with urllib.request.urlopen(request, timeout=self.timeout) as response:
-            destination.write_bytes(response.read())
+            content_length = response.headers.get("Content-Length")
+            if content_length and int(content_length) > max_bytes:
+                raise RuntimeError(f"{resource_type} exceeds the {max_bytes} byte download limit")
+
+            total = 0
+            with destination.open("wb") as output:
+                while True:
+                    remaining = max_bytes - total
+                    if remaining <= 0:
+                        raise RuntimeError(f"{resource_type} exceeds the {max_bytes} byte download limit")
+                    chunk = response.read(min(self.DOWNLOAD_CHUNK_BYTES, remaining))
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > max_bytes:
+                        raise RuntimeError(f"{resource_type} exceeds the {max_bytes} byte download limit")
+                    output.write(chunk)
 
     def _run(self, command: list[str]) -> None:
         try:
