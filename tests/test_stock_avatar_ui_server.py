@@ -10,3 +10,7 @@ def test_stock_avatar_ui_adds_assembly_controls() -> None:
 def test_stock_avatar_ui_limits_browser_selection() -> None:
     assert "selectedStockClips.length>=6" in HTML
     assert "Select at least one stock clip." in HTML
+
+
+def test_stock_avatar_extension_script_loads_after_base_ui_script() -> None:
+    assert HTML.index("loadHistory();") < HTML.index("const assembleButton=")
