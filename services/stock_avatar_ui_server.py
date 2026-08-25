@@ -111,8 +111,10 @@ class StockAvatarStudioHandler(StudioHandler):
                 output_path=output_path,
             )
             self._send(json.dumps(result).encode(), "application/json", HTTPStatus.OK)
-        except (ValueError, RuntimeError, OSError, json.JSONDecodeError) as exc:
+        except (ValueError, json.JSONDecodeError) as exc:
             self._send(json.dumps({"error": str(exc)}).encode(), "application/json", HTTPStatus.BAD_REQUEST)
+        except (RuntimeError, OSError) as exc:
+            self._send(json.dumps({"error": str(exc)}).encode(), "application/json", HTTPStatus.INTERNAL_SERVER_ERROR)
 
 
 def serve_stock_avatar(host: str = "0.0.0.0", port: int = 8787) -> None:
