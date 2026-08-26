@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlparse
 
 from models.universe import Avatar, CharacterBible
 from services.avatar_repository import AvatarRepository
@@ -29,13 +30,16 @@ class AvatarBrowserService:
             raise ValueError("Avatar name cannot be empty")
         if len(name) > 120:
             raise ValueError("Avatar name is too long")
-        if visual_reference and not visual_reference.startswith("https://"):
-            raise ValueError("Avatar reference must use HTTPS")
+        visual_reference = visual_reference.strip()
+        if visual_reference:
+            parsed = urlparse(visual_reference)
+            if parsed.scheme != "https" or not parsed.hostname:
+                raise ValueError("Avatar reference must use a valid HTTPS URL")
         avatar = Avatar(
             name=name,
             bible=CharacterBible(
                 appearance=appearance.strip(),
-                visual_reference=visual_reference.strip(),
+                visual_reference=visual_reference,
             ),
         )
         return self._serialize(self.repository.create(avatar))
