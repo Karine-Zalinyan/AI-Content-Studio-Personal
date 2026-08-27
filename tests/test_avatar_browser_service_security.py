@@ -1,6 +1,19 @@
 from services.avatar_browser_service import AvatarBrowserService
 
 
+def test_avatar_browser_service_accepts_valid_https_reference(tmp_path) -> None:
+    service = AvatarBrowserService(tmp_path / "avatars.json")
+
+    avatar = service.create(
+        name="Lumi",
+        appearance="Cream-white fur, amber eyes",
+        visual_reference="https://example.com/avatar.png",
+    )
+
+    assert avatar["name"] == "Lumi"
+    assert avatar["visual_reference"] == "https://example.com/avatar.png"
+
+
 def test_avatar_browser_service_rejects_http_reference(tmp_path) -> None:
     service = AvatarBrowserService(tmp_path / "avatars.json")
 
