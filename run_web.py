@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 
 from services import stock_avatar_ui_server
+from services.stock_avatar_ui_server import serve_stock_avatar
 
 
 def _port() -> int:
@@ -57,7 +58,7 @@ def _patch_stock_search_submit() -> None:
 def main() -> None:
     host = os.getenv("HOST", "0.0.0.0")
     _patch_stock_search_submit()
-    stock_avatar_ui_server.serve_stock_avatar(host=host, port=_port())
+    serve_stock_avatar(host=host, port=_port())
 
 
 if __name__ == "__main__":
