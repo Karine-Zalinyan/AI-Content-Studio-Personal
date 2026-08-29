@@ -112,8 +112,16 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self._send(b'{"error":"Query cannot be empty"}',"application/json",400);return
             try:
                 results = STOCK_VIDEOS.search(query, orientation="portrait")
-            except Exception:
-                self._send(b'{"error":"Stock video search unavailable"}',"application/json",502);return
+            except Exception as exc:
+                message = str(exc).strip() or "Stock video search unavailable"
+                if len(message) > 240:
+                    message = message[:240]
+                self._send(
+                    json.dumps({"error": f"Stock video search unavailable: {message}"}).encode(),
+                    "application/json",
+                    502,
+                )
+                return
             self._send(json.dumps({"results": results}).encode(),"application/json");return
         if parsed.path.startswith("/api/jobs/"):
             job=JOBS.get(parsed.path.rsplit("/",1)[-1])
