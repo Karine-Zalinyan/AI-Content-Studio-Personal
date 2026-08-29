@@ -6,6 +6,8 @@ services:
     envVars:
       - key: PEXELS_API_KEY
         sync: false
+      - key: FAL_KEY
+        sync: false
       - key: PORT
         value: 10000
       - key: HOST
