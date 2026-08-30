@@ -113,7 +113,12 @@ class StudioHandler(BaseHTTPRequestHandler):
             try:
                 results = STOCK_VIDEOS.search(query, orientation="portrait")
             except Exception:
-                self._send(b'{"error":"Stock video search unavailable"}',"application/json",502);return
+                self._send(
+                    b'{"error":"Stock video search unavailable"}',
+                    "application/json",
+                    502,
+                )
+                return
             self._send(json.dumps({"results": results}).encode(),"application/json");return
         if parsed.path.startswith("/api/jobs/"):
             job=JOBS.get(parsed.path.rsplit("/",1)[-1])
