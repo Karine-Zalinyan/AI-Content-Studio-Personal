@@ -78,6 +78,7 @@ def _patch_stock_search_submit() -> None:
     }
   };
   button.addEventListener('click', runSearch);
+  const stockButton = button;
   input.addEventListener('keydown', event => {
     if (event.key === 'Enter') {
       event.preventDefault();
