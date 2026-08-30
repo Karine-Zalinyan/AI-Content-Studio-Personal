@@ -12,7 +12,7 @@ def test_stock_search_submit_is_bridged_without_native_navigation(monkeypatch) -
     run_web._patch_stock_search_submit()
 
     assert 'id="stock-submit" class="secondary" type="button"' in stock_avatar_ui_server.HTML
-    assert "stockButton.addEventListener('click'" in stock_avatar_ui_server.HTML
+    assert "button.addEventListener('click', runSearch)" in stock_avatar_ui_server.HTML
     assert "searchStock()" in stock_avatar_ui_server.HTML
     assert "requestSubmit()" not in stock_avatar_ui_server.HTML
 
