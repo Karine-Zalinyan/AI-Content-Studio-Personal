@@ -43,7 +43,7 @@ def _patch_stock_search_submit() -> None:
   const stockButton = document.getElementById('stock-submit');
   const stockForm = document.getElementById('stock-search');
   if (!stockButton || !stockForm) return;
-  stockButton.addEventListener('click', () => stockForm.requestSubmit());
+  stockButton.addEventListener('click', () => searchStock());
 })();
 </script>
 """
