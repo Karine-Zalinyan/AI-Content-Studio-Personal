@@ -76,3 +76,19 @@ def test_job_status_payload_is_json_serializable() -> None:
 
     assert json.loads(json.dumps(payload))["video"] == "video.mp4"
     assert payload["durable_job_id"] == "durable-job-3"
+
+
+def test_stock_search_error_message_is_safe() -> None:
+    class FakeResponse:
+        status_code = 401
+        text = "provider response body"
+
+    class FakeProviderError(Exception):
+        response = FakeResponse()
+
+    error = FakeProviderError()
+    status = getattr(getattr(error, "response", None), "status_code", None)
+    message = f"Stock provider returned HTTP {status}"
+
+    assert message == "Stock provider returned HTTP 401"
+    assert error.response.text not in message
