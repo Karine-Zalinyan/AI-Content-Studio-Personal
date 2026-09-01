@@ -117,10 +117,8 @@ class StudioHandler(BaseHTTPRequestHandler):
                 provider_status = getattr(response, "status_code", None)
                 if isinstance(provider_status, int):
                     message = f"Stock provider returned HTTP {provider_status}"
-                elif isinstance(exc, RuntimeError):
-                    message = str(exc)
                 else:
-                    message = "Stock video search failed"
+                    message = "Stock video search unavailable"
                 print(
                     f"Stock search failed: {type(exc).__name__}"
                     f" ({provider_status or 'unknown'})"
