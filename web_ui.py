@@ -93,9 +93,10 @@ def _run_generation(job_id: str, durable_job_id: str, project_id: str, topic: st
         metadata = dict(result.video.metadata or {})
         HISTORY.update_job(durable_job_id, status="done", output_path=str(relative), output_metadata=metadata)
         JOBS.update(job_id, status="done", video=str(relative))
-    except Exception as exc:
-        HISTORY.update_job(durable_job_id, status="failed", error_message=str(exc))
-        JOBS.update(job_id, status="failed", error=str(exc))
+    except Exception:
+        safe_error = "Video generation unavailable"
+        HISTORY.update_job(durable_job_id, status="failed", error_message=safe_error)
+        JOBS.update(job_id, status="failed", error=safe_error)
 
 
 class StudioHandler(BaseHTTPRequestHandler):
