@@ -190,19 +190,22 @@ def test_stock_video_search_provider_failure_hides_secret(monkeypatch, tmp_path:
         server.server_close()
 
 
-def test_browser_generation_failure_is_persisted(monkeypatch, tmp_path: Path) -> None:
+def test_browser_generation_failure_is_persisted_safely(monkeypatch, tmp_path: Path) -> None:
+    provider_secret = "mock-provider-secret"
     server, history, _ = _start_server(monkeypatch, tmp_path, fail=True)
     try:
         created = _post_generate(server, "A generation that should fail")
         job = _poll_job(server, str(created["job_id"]))
 
         assert job["status"] == "failed"
-        assert "mock generation failure" in str(job["error"])
+        assert job["error"] == "Video generation unavailable"
+        assert provider_secret not in json.dumps(job)
 
         recent = history.list_recent()
         assert len(recent) == 1
         assert recent[0]["status"] == "failed"
-        assert recent[0]["error_message"] == "mock generation failure"
+        assert recent[0]["error_message"] == "Video generation unavailable"
+        assert provider_secret not in json.dumps(recent[0])
         assert recent[0]["output_path"] is None
     finally:
         server.shutdown()
