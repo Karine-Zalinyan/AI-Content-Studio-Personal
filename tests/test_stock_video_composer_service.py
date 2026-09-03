@@ -36,10 +36,9 @@ def test_compose_downloads_selected_clips_and_builds_youtube_command(tmp_path: P
         "https://cdn.example/two.mp4",
     ]
     command = commands[0]
-    assert command[:8] == [
-        "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", command[7]
-    ]
-    assert "1920:1080" in command
+    assert command[:7] == ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i"]
+    assert command[7].endswith("concat.txt")
+    assert any("1920:1080" in argument for argument in command)
     assert "-t" in command
     assert command[command.index("-t") + 1] == "60"
     assert command[-1] == str(output.resolve())
