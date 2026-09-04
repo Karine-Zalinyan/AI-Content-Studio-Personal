@@ -93,9 +93,10 @@ def _run_generation(job_id: str, durable_job_id: str, project_id: str, topic: st
         metadata = dict(result.video.metadata or {})
         HISTORY.update_job(durable_job_id, status="done", output_path=str(relative), output_metadata=metadata)
         JOBS.update(job_id, status="done", video=str(relative))
-    except Exception as exc:
-        HISTORY.update_job(durable_job_id, status="failed", error_message=str(exc))
-        JOBS.update(job_id, status="failed", error=str(exc))
+    except Exception:
+        safe_error = "Video generation unavailable"
+        HISTORY.update_job(durable_job_id, status="failed", error_message=safe_error)
+        JOBS.update(job_id, status="failed", error=safe_error)
 
 
 class StudioHandler(BaseHTTPRequestHandler):
@@ -112,9 +113,19 @@ class StudioHandler(BaseHTTPRequestHandler):
                 self._send(b'{"error":"Query cannot be empty"}',"application/json",400);return
             try:
                 results = STOCK_VIDEOS.search(query, orientation="portrait")
-            except Exception:
+            except Exception as exc:
+                response = getattr(exc, "response", None)
+                provider_status = getattr(response, "status_code", None)
+                if isinstance(provider_status, int):
+                    message = f"Stock provider returned HTTP {provider_status}"
+                else:
+                    message = "Stock video search unavailable"
+                print(
+                    f"Stock search failed: {type(exc).__name__}"
+                    f" ({provider_status or 'unknown'})"
+                )
                 self._send(
-                    b'{"error":"Stock video search unavailable"}',
+                    json.dumps({"error": message}).encode(),
                     "application/json",
                     502,
                 )
