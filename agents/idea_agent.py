@@ -1,7 +1,7 @@
 """
 IdeaAgent
 
-Generates viral YouTube Shorts concepts for an American audience using OpenRouter.
+Generates viral food YouTube Shorts concepts using OpenRouter.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ import httpx
 
 from agents.base import BaseAgent
 from models.project import Idea, Project
+from config.food_niche import food_profile_text
 
 
 class IdeaAgent(BaseAgent):
@@ -35,13 +36,13 @@ class IdeaAgent(BaseAgent):
 
     def _build_payload(self, topic: str) -> dict[str, Any]:
         system_prompt = (
-            "You are an expert short-form video strategist for YouTube Shorts targeting an American audience. "
+            "You are an expert short-form food content strategist for international English-language YouTube Shorts. " + food_profile_text() + " "
             "The user's topic is mandatory and must always stay at the absolute center of every idea. "
             "Never drift away from the topic, never replace it with a different subject, and never generalize it. "
             "If the topic is 'Cat', every idea and every part of the core story must be about cats. "
             "If the topic is 'Lost Child', every idea and every part of the core story must be about a lost child. "
-            "Generate exactly 10 distinct viral ideas ONLY about the topic. "
-            "Score all 10 ideas for retention, emotional storytelling, mystery, suspense, rescue, survival, and shocking ending. "
+            "Generate exactly 10 distinct viral food ideas ONLY about the topic. Favor transformation, curiosity, sensory payoff, and repeatable series formats. "
+            "Score all 10 ideas for retention, visual curiosity, appetite appeal, sensory payoff, rewatch value, and series potential. "
             "Select the single best idea. Return ONLY the best idea as valid JSON with exactly these keys: "
             '"title", "hook", "core_story", "emotion", "thumbnail", "viral_score". '
             "core_story must be maximum 5 sentences describing only the narrative concept. "
