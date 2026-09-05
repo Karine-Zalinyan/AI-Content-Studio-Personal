@@ -1,7 +1,7 @@
 """
 DirectorAgent
 
-Expands a viral idea (Idea JSON) into a detailed cinematic scene breakdown
+Expands a viral food idea (Idea JSON) into a detailed cinematic scene breakdown
 optimized for AI image generation, AI video generation, and automatic editing.
 """
 
@@ -16,6 +16,7 @@ import httpx
 
 from agents.base import BaseAgent
 from models.project import DirectorPlan, Project
+from config.food_niche import food_profile_text
 
 
 class DirectorAgent(BaseAgent):
@@ -37,13 +38,13 @@ class DirectorAgent(BaseAgent):
     def _build_payload(self, idea: dict[str, Any]) -> dict[str, Any]:
         idea_str = json.dumps(idea, ensure_ascii=False, indent=2)
         system_prompt = (
-            "You are an expert film director for YouTube Shorts optimizing for AI-generated visuals and video. "
+            "You are an expert food film director for YouTube Shorts optimizing for AI-generated culinary visuals and video. " + food_profile_text() + " "
             "Your task is to take a video idea and break it down into a detailed cinematic scene-by-scene breakdown. "
             "You MUST NOT invent a different story or change the narrative. "
             "You ONLY expand the idea into 8–12 scenes, each carefully crafted for AI image generation, "
             "AI video generation, and automatic editing. "
             "Every field must be specific, visual, and actionable for AI systems. "
-            "Total duration must be exactly 60 seconds. "
+            "Total duration must be exactly 30 seconds. "
             "Each scene must have a clear cinematic purpose that advances the narrative. "
             "Return valid JSON with exactly this structure: "
             '{"duration": 60, "style": "...", "aspect_ratio": "9:16", "fps": 30, '
@@ -71,8 +72,8 @@ class DirectorAgent(BaseAgent):
             f"Expand this idea into a detailed scene breakdown:\n\n{idea_str}\n\n"
             "Rules:\n"
             "1. NEVER change the story. ONLY expand the core_story into scenes.\n"
-            "2. Create 8–12 scenes.\n"
-            "3. Total duration = 60 seconds.\n"
+            "2. Create 6–8 scenes.\n"
+            "3. Total duration = 30 seconds.\n"
             "4. For each scene:\n"
             "   - camera: structured {shot, movement, angle}\n"
             "   - lighting: structured {type, temperature}\n"
